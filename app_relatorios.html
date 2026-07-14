@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Relatórios — Automação de Dados</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg-deep:#0A1420;
+    --panel:#101C2E;
+    --panel-alt:#16233A;
+    --line:#223047;
+    --amber:#F2A33D;
+    --amber-dim:#8A5F22;
+    --teal:#3FA9A0;
+    --teal-dim:#25625C;
+    --text-primary:#EAF0F6;
+    --text-muted:#7C8CA6;
+    --danger:#E2645C;
+    --radius:10px;
+    --font-display:'Space Grotesk',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg-deep);
+    color:var(--text-primary);
+    font-family:var(--font-body);
+    min-height:100vh;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:32px 32px;
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 80px;}
+
+  /* HEADER / INSTRUMENT STRIP */
+  header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:18px 24px;background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--radius);
+    margin-bottom:20px;flex-wrap:wrap;gap:16px;
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .brand-mark{
+    width:40px;height:40px;border-radius:8px;
+    background:linear-gradient(135deg,var(--amber),var(--teal));
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-weight:700;color:#0A1420;font-size:18px;
+  }
+  .brand h1{font-family:var(--font-display);font-size:19px;font-weight:600;letter-spacing:0.2px;}
+  .brand p{font-size:12px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px;}
+  .status-led{display:flex;align-items:center;gap:8px;font-family:var(--font-mono);font-size:12px;color:var(--text-muted);}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 8px var(--danger);}
+  .dot.on{background:var(--teal);box-shadow:0 0 8px var(--teal);}
+
+  /* UPLOAD ZONE */
+  .dropzone{
+    border:1.5px dashed var(--line);border-radius:var(--radius);
+    background:var(--panel);padding:56px 24px;text-align:center;
+    cursor:pointer;transition:border-color .15s, background .15s;
+    margin-bottom:20px;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--amber);background:var(--panel-alt);}
+  .dropzone .icon{font-size:34px;margin-bottom:12px;color:var(--amber);font-family:var(--font-mono);}
+  .dropzone h2{font-family:var(--font-display);font-size:16px;font-weight:600;margin-bottom:6px;}
+  .dropzone p{font-size:13px;color:var(--text-muted);}
+  .dropzone input{display:none;}
+  .btn-row{display:flex;gap:12px;justify-content:center;margin-top:18px;flex-wrap:wrap;}
+  button{
+    font-family:var(--font-body);font-size:13px;font-weight:600;
+    border-radius:8px;border:1px solid var(--line);
+    background:var(--panel-alt);color:var(--text-primary);
+    padding:10px 18px;cursor:pointer;transition:.15s;
+  }
+  button:hover{border-color:var(--teal);}
+  button.primary{background:var(--amber);color:#241505;border-color:var(--amber);}
+  button.primary:hover{background:#FFB454;}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+
+  /* CONFIG PANEL */
+  .config{
+    display:none;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px 22px;margin-bottom:20px;
+    gap:18px;flex-wrap:wrap;align-items:flex-end;
+  }
+  .config.show{display:flex;}
+  .field{display:flex;flex-direction:column;gap:6px;min-width:150px;}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);font-family:var(--font-mono);}
+  select{
+    background:var(--bg-deep);color:var(--text-primary);
+    border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+    font-family:var(--font-body);font-size:13px;
+  }
+  .filename-tag{font-family:var(--font-mono);font-size:12px;color:var(--teal);margin-left:auto;}
+
+  /* REPORT AREA (captured for PDF) */
+  #report{display:none;}
+  #report.show{display:block;}
+
+  .kpi-grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:14px;margin-bottom:20px;
+  }
+  .kpi{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;position:relative;overflow:hidden;
+  }
+  .kpi::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--amber);
+  }
+  .kpi.teal::before{background:var(--teal);}
+  .kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:8px;}
+  .kpi .value{font-family:var(--font-mono);font-size:24px;font-weight:600;letter-spacing:0.5px;}
+
+  .panel-title{
+    font-family:var(--font-display);font-size:15px;font-weight:600;
+    margin:26px 0 12px;display:flex;align-items:center;gap:10px;
+  }
+  .panel-title::before{content:'';width:8px;height:8px;background:var(--amber);display:inline-block;}
+
+  .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media (max-width:760px){.charts-grid{grid-template-columns:1fr;}}
+  .chart-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;
+  }
+  .chart-card h3{font-size:13px;font-weight:500;color:var(--text-muted);margin-bottom:10px;font-family:var(--font-body);}
+  .chart-wrap{position:relative;height:220px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--font-mono);}
+  .table-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;overflow-x:auto;
+  }
+  th{
+    text-align:left;padding:8px 10px;background:var(--panel-alt);
+    color:var(--amber);font-weight:600;border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  td{padding:7px 10px;border-bottom:1px solid var(--line);color:var(--text-primary);white-space:nowrap;}
+  tr:hover td{background:var(--panel-alt);}
+
+  .export-bar{
+    display:flex;justify-content:flex-end;gap:12px;margin-top:22px;
+  }
+  .footer-note{
+    text-align:center;color:var(--text-muted);font-size:11px;
+    font-family:var(--font-mono);margin-top:30px;
+  }
+  #pdf-title{display:none;}
+  .loading-msg{text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div>
+        <h1>Painel de Relatórios</h1>
+        <p>gerador automático · CSV / XLSX → PDF</p>
+      </div>
+    </div>
+    <div class="status-led"><span class="dot" id="statusDot"></span><span id="statusText">Aguardando dados</span></div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <div class="icon">⇪</div>
+    <h2>Arraste um arquivo aqui ou clique para selecionar</h2>
+    <p>Formatos aceitos: .csv, .xlsx, .xls</p>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+    <div class="btn-row">
+      <button class="primary" id="btnSelect" type="button">Selecionar arquivo</button>
+      <button id="btnSample" type="button">Usar dados de exemplo</button>
+    </div>
+    <div class="loading-msg" id="loadingMsg"></div>
+  </div>
+
+  <div class="config" id="configPanel">
+    <div class="field">
+      <label>Coluna de data</label>
+      <select id="selDate"></select>
+    </div>
+    <div class="field">
+      <label>Coluna numérica</label>
+      <select id="selValue"></select>
+    </div>
+    <div class="field">
+      <label>Coluna categórica</label>
+      <select id="selCat"></select>
+    </div>
+    <button id="btnApply" type="button">Aplicar</button>
+    <span class="filename-tag" id="fileNameTag"></span>
+  </div>
+
+  <div id="report">
+    <div id="pdf-title"></div>
+
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="panel-title">Análise gráfica</div>
+    <div class="charts-grid">
+      <div class="chart-card"><h3 id="titleSerie">Série temporal</h3><div class="chart-wrap"><canvas id="chartSerie" role="img" aria-label="Gráfico de série temporal">Série temporal dos dados</canvas></div></div>
+      <div class="chart-card"><h3 id="titleBarras">Comparativo por categoria</h3><div class="chart-wrap"><canvas id="chartBarras" role="img" aria-label="Gráfico de barras por categoria">Comparativo por categoria</canvas></div></div>
+      <div class="chart-card"><h3 id="titlePizza">Distribuição percentual</h3><div class="chart-wrap"><canvas id="chartPizza" role="img" aria-label="Gráfico de pizza">Distribuição percentual</canvas></div></div>
+      <div class="chart-card"><h3 id="titleHisto">Histograma</h3><div class="chart-wrap"><canvas id="chartHisto" role="img" aria-label="Histograma">Histograma da coluna numérica</canvas></div></div>
+    </div>
+
+    <div class="panel-title">Amostra dos dados</div>
+    <div class="table-card">
+      <table id="dataTable"></table>
+    </div>
+
+    <div class="export-bar">
+      <button id="btnExport" class="primary" type="button">Exportar relatório em PDF</button>
+    </div>
+
+    <div class="footer-note" id="footerNote"></div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const state = { data: [], columns: [], numeric: [], categorical: [], dateCol: null, valueCol: null, catCol: null, fileName: '' };
+  const charts = {};
+  const PALETA = ['#F2A33D','#3FA9A0','#7F77DD','#D85A30','#5DCAA5','#ED93B1'];
+  const GRID_COLOR = 'rgba(124,140,166,0.15)';
+  const TICK_COLOR = '#7C8CA6';
+
+  Chart.defaults.color = TICK_COLOR;
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.font.size = 11;
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const btnSelect = document.getElementById('btnSelect');
+  const btnSample = document.getElementById('btnSample');
+  const loadingMsg = document.getElementById('loadingMsg');
+  const configPanel = document.getElementById('configPanel');
+  const reportEl = document.getElementById('report');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+
+  btnSelect.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('click', (e) => { if(e.target === btnSample) return; fileInput.click(); });
+  fileInput.addEventListener('change', (e) => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+  ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if(f) handleFile(f); });
+
+  btnSample.addEventListener('click', () => {
+    const rows = gerarDadosExemplo();
+    state.fileName = 'dados_exemplo.csv';
+    processar(rows);
+  });
+
+  function setStatus(on, text){
+    statusDot.classList.toggle('on', on);
+    statusText.textContent = text;
+  }
+
+  function handleFile(file){
+    state.fileName = file.name;
+    loadingMsg.textContent = 'Lendo ' + file.name + '...';
+    const ext = file.name.split('.').pop().toLowerCase();
+    if(ext === 'csv'){
+      Papa.parse(file, {
+        header: true, dynamicTyping: true, skipEmptyLines: true,
+        complete: (res) => { loadingMsg.textContent=''; processar(res.data); },
+        error: (err) => { loadingMsg.textContent = 'Erro ao ler CSV: ' + err.message; }
+      });
+    } else if(ext === 'xlsx' || ext === 'xls'){
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try{
+          const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+          loadingMsg.textContent = '';
+          processar(rows);
+        }catch(err){ loadingMsg.textContent = 'Erro ao ler Excel: ' + err.message; }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      loadingMsg.textContent = 'Formato não suportado. Use .csv, .xlsx ou .xls.';
+    }
+  }
+
+  function gerarDadosExemplo(){
+    const regioes = ['Sul','Sudeste','Nordeste','Norte','Centro-Oeste'];
+    const produtos = ['Painel Solar','Inversor','Bateria','Cabo Elétrico','Medidor'];
+    const rows = [];
+    const start = new Date('2025-01-01');
+    for(let i=0;i<300;i++){
+      const d = new Date(start.getTime() + Math.floor(Math.random()*180)*86400000);
+      const qtd = 1 + Math.floor(Math.random()*19);
+      const preco = Math.round((50 + Math.random()*1950)*100)/100;
+      rows.push({
+        Data: d.toISOString().slice(0,10),
+        Regiao: regioes[Math.floor(Math.random()*regioes.length)],
+        Produto: produtos[Math.floor(Math.random()*produtos.length)],
+        Quantidade: qtd,
+        Preco_Unitario: preco,
+        Receita: Math.round(qtd*preco*100)/100
+      });
+    }
+    return rows.sort((a,b)=> a.Data.localeCompare(b.Data));
+  }
+
+  function processar(rows){
+    rows = rows.filter(r => Object.values(r).some(v => v !== null && v !== undefined && v !== ''));
+    if(rows.length === 0){ loadingMsg.textContent = 'Arquivo vazio ou inválido.'; return; }
+
+    state.data = rows;
+    state.columns = Object.keys(rows[0]);
+
+    const numeric = [], categorical = [];
+    state.columns.forEach(col => {
+      const sample = rows.slice(0, 30).map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+      const isNumeric = sample.length > 0 && sample.every(v => typeof v === 'number' || (!isNaN(parseFloat(v)) && isFinite(v)));
+      const looksDate = /data|date/i.test(col);
+      if(isNumeric && !looksDate) numeric.push(col);
+      else categorical.push(col);
+    });
+    state.numeric = numeric;
+    state.categorical = categorical;
+
+    const dateCandidates = state.columns.filter(c => /data|date/i.test(c));
+    state.dateCol = dateCandidates[0] || null;
+    state.valueCol = numeric[0] || null;
+    state.catCol = categorical.find(c => c !== state.dateCol) || null;
+
+    preencherSelects();
+    configPanel.classList.add('show');
+    document.getElementById('fileNameTag').textContent = state.fileName + ' · ' + rows.length + ' registros';
+    setStatus(true, rows.length + ' registros carregados');
+    renderizarTudo();
+  }
+
+  function preencherSelects(){
+    const selDate = document.getElementById('selDate');
+    const selValue = document.getElementById('selValue');
+    const selCat = document.getElementById('selCat');
+    selDate.innerHTML = '<option value="">Nenhuma</option>' + state.columns.map(c => `<option value="${c}">${c}</option>`).join('');
+    selValue.innerHTML = state.numeric.map(c => `<option value="${c}">${c}</option>`).join('');
+    selCat.innerHTML = '<option value="">Nenhuma</option>' + state.categorical.map(c => `<option value="${c}">${c}</option>`).join('');
+    if(state.dateCol) selDate.value = state.dateCol;
+    if(state.valueCol) selValue.value = state.valueCol;
+    if(state.catCol) selCat.value = state.catCol;
+  }
+
+  document.getElementById('btnApply').addEventListener('click', () => {
+    state.dateCol = document.getElementById('selDate').value || null;
+    state.valueCol = document.getElementById('selValue').value || null;
+    state.catCol = document.getElementById('selCat').value || null;
+    renderizarTudo();
+  });
+
+  function parseNum(v){ const n = typeof v === 'number' ? v : parseFloat(v); return isNaN(n) ? 0 : n; }
+
+  function renderizarTudo(){
+    if(!state.valueCol){ return; }
+    reportEl.classList.add('show');
+
+    const vals = state.data.map(r => parseNum(r[state.valueCol]));
+    const soma = vals.reduce((a,b)=>a+b,0);
+    const media = soma / vals.length;
+    const maximo = Math.max(...vals);
+    const minimo = Math.min(...vals);
+
+    document.getElementById('pdf-title').textContent = 'Relatório Automático — ' + state.fileName;
+
+    const kpiGrid = document.getElementById('kpiGrid');
+    kpiGrid.innerHTML = `
+      <div class="kpi"><div class="label">Registros</div><div class="value">${state.data.length}</div></div>
+      <div class="kpi teal"><div class="label">Soma de ${state.valueCol}</div><div class="value">${fmt(soma)}</div></div>
+      <div class="kpi"><div class="label">Média</div><div class="value">${fmt(media)}</div></div>
+      <div class="kpi teal"><div class="label">Máximo</div><div class="value">${fmt(maximo)}</div></div>
+    `;
+
+    renderSerieTemporal();
+    renderBarras();
+    renderPizza();
+    renderHisto(vals);
+    renderTabela();
+
+    document.getElementById('footerNote').textContent = 'Gerado automaticamente em ' + new Date().toLocaleString('pt-BR');
+  }
+
+  function fmt(n){ return n.toLocaleString('pt-BR', { maximumFractionDigits: 2 }); }
+
+  function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+
+  function renderSerieTemporal(){
+    const card = document.getElementById('chartSerie').closest('.chart-card');
+    if(!state.dateCol){ card.style.display='none'; return; }
+    card.style.display='';
+    document.getElementById('titleSerie').textContent = 'Evolução de ' + state.valueCol + ' (semanal)';
+
+    const grupos = {};
+    state.data.forEach(r => {
+      const d = new Date(r[state.dateCol]);
+      if(isNaN(d)) return;
+      const semana = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+      const key = semana.toISOString().slice(0,10);
+      grupos[key] = (grupos[key] || 0) + parseNum(r[state.valueCol]);
+    });
+    const labels = Object.keys(grupos).sort();
+    const valores = labels.map(k => grupos[k]);
+
+    destroyChart('serie');
+    charts.serie = new Chart(document.getElementById('chartSerie'), {
+      type: 'line',
+      data: { labels, datasets: [{ data: valores, borderColor: '#F2A33D', backgroundColor: 'rgba(242,163,61,0.12)', fill: true, tension: 0.3, pointRadius: 2, borderWidth: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
+          y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } }
+        }
+      }
+    });
+  }
+
+  function renderBarras(){
+    const cardB = document.getElementById('chartBarras').closest('.chart-card');
+    if(!state.catCol){ cardB.style.display='none'; document.getElementById('chartPizza').closest('.chart-card').style.display='none'; return; }
+    cardB.style.display=''; document.getElementById('chartPizza').closest('.chart-card').style.display='';
+    document.getElementById('titleBarras').textContent = state.valueCol + ' total por ' + state.catCol;
+
+    const grupos = {};
+    state.data.forEach(r => {
+      const k = String(r[state.catCol] ?? 'N/A');
+      grupos[k] = (grupos[k] || 0) + parseNum(r[state.valueCol]);
+    });
+    const entries = Object.entries(grupos).sort((a,b)=>b[1]-a[1]);
+    const labels = entries.map(e=>e[0]);
+    const valores = entries.map(e=>e[1]);
+
+    destroyChart('barras');
+    charts.barras = new Chart(document.getElementById('chartBarras'), {
+      type: 'bar',
+      data: { labels, datasets: [{ data: valores, backgroundColor: labels.map((_,i)=>PALETA[i%PALETA.length]), borderRadius: 4 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: TICK_COLOR, maxRotation: 30 } },
+          y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } }
+        }
+      }
+    });
+
+    renderPizzaData(grupos);
+  }
+
+  function renderPizza(){ /* triggered from renderBarras via renderPizzaData */ }
+
+  function renderPizzaData(grupos){
+    document.getElementById('titlePizza').textContent = 'Participação de ' + state.valueCol + ' por ' + state.catCol;
+    const entries = Object.entries(grupos).sort((a,b)=>b[1]-a[1]);
+    const labels = entries.map(e=>e[0]);
+    const valores = entries.map(e=>e[1]);
+    const total = valores.reduce((a,b)=>a+b,0);
+
+    destroyChart('pizza');
+    charts.pizza = new Chart(document.getElementById('chartPizza'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: valores, backgroundColor: labels.map((_,i)=>PALETA[i%PALETA.length]), borderColor: '#101C2E', borderWidth: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right', labels: { color: TICK_COLOR, boxWidth: 10, padding: 10, font: { size: 10 },
+              generateLabels: (chart) => chart.data.labels.map((l,i)=>({ text: l+' ('+((valores[i]/total)*100).toFixed(0)+'%)', fillStyle: PALETA[i%PALETA.length], strokeStyle: PALETA[i%PALETA.length] }))
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderHisto(vals){
+    document.getElementById('titleHisto').textContent = 'Histograma de ' + state.valueCol;
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const bins = 12;
+    const width = (max - min) / bins || 1;
+    const counts = new Array(bins).fill(0);
+    vals.forEach(v => {
+      let idx = Math.floor((v - min) / width);
+      if(idx >= bins) idx = bins - 1;
+      if(idx < 0) idx = 0;
+      counts[idx]++;
+    });
+    const labels = counts.map((_,i) => Math.round(min + i*width));
+
+    destroyChart('histo');
+    charts.histo = new Chart(document.getElementById('chartHisto'), {
+      type: 'bar',
+      data: { labels, datasets: [{ data: counts, backgroundColor: '#3FA9A0', borderRadius: 3 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: TICK_COLOR, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+          y: { grid: { color: GRID_COLOR }, ticks: { color: TICK_COLOR } }
+        }
+      }
+    });
+  }
+
+  function renderTabela(){
+    const cols = state.columns;
+    const amostra = state.data.slice(0, 10);
+    let html = '<thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+    amostra.forEach(r => {
+      html += '<tr>' + cols.map(c => `<td>${r[c] ?? ''}</td>`).join('') + '</tr>';
+    });
+    html += '</tbody>';
+    document.getElementById('dataTable').innerHTML = html;
+  }
+
+  document.getElementById('btnExport').addEventListener('click', exportarPDF);
+
+  async function exportarPDF(){
+    const btn = document.getElementById('btnExport');
+    btn.disabled = true;
+    btn.textContent = 'Gerando PDF...';
+    try{
+      const el = document.getElementById('report');
+      const canvas = await html2canvas(el, { backgroundColor: '#0A1420', scale: 2 });
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = pageW - 20;
+      const imgH = (canvas.height * imgW) / canvas.width;
+
+      let heightLeft = imgH;
+      let position = 10;
+      const imgData = canvas.toDataURL('image/png');
+
+      pdf.setFillColor(10,20,32);
+      pdf.rect(0,0,pageW,pageH,'F');
+      pdf.addImage(imgData, 'PNG', 10, position, imgW, imgH);
+      heightLeft -= (pageH - 20);
+
+      while(heightLeft > 0){
+        position = heightLeft - imgH + 10;
+        pdf.addPage();
+        pdf.setFillColor(10,20,32);
+        pdf.rect(0,0,pageW,pageH,'F');
+        pdf.addImage(imgData, 'PNG', 10, position, imgW, imgH);
+        heightLeft -= (pageH - 20);
+      }
+
+      pdf.save('relatorio_' + (state.fileName.replace(/\.[^/.]+$/,'') || 'automatico') + '.pdf');
+    }catch(err){
+      alert('Erro ao gerar PDF: ' + err.message);
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Exportar relatório em PDF';
+    }
+  }
+})();
+</script>
+</body>
+</html>
